@@ -1,22 +1,26 @@
-# v. 1.0
-# 02.09.2017
+# v. 1.1
+# 03.09.2017
 # Sergii Mamedov
 
 """
 Requests version.
-Get metadata from all dois from a journal. 
+Get metadata from all dois from a journal.
 Journal`s urls: https://www.crossref.org/06members/51depositor.html
 """
 
 import time
 import json
+import logging
 
 from tqdm import tqdm
 import requests
-requests.packages.urllib3.disable_warnings()
+
+FORMAT = '%(asctime)s   %(levelname)s   %(message)s'
+logging.basicConfig(format=FORMAT, level=logging.INFO)
+
 
 def connect_get(url, timeout=30, headers={}, cookies={}):
-    """ 
+    """
     get source code from page
     """
 
@@ -30,7 +34,7 @@ def connect_get(url, timeout=30, headers={}, cookies={}):
             conn.raise_for_status()
             break
         except requests.exceptions.RequestException as err:
-            stderr.write('RequestException\t' + str(i) + '\t' + url + '\n' + unicode(err) + '\n')
+            logging.info('RequestException, HTTP Code\t{}'.format(conn.status_code))
 
         time.sleep(1.0)
 
@@ -43,12 +47,12 @@ def get_dois_list(url):
     """
 
     raw = connect_get(url, timeout=120)
-    return [item.split(' ')[0] for item in raw.split('\r\n')[2:]]
+    return [item.split(' ')[0] for item in raw.split('\r\n')[2:] if item.strip()]
 
 
 def main():
 
-    URL_API = 'https://api.crossref.org/works/'
+    URL_API = 'http://api.crossref.org/works/'
     URL_JOURNAL = 'http://data.crossref.org/depositorreport?pubid=J140965'
 
     dois = get_dois_list(URL_JOURNAL)
@@ -57,7 +61,7 @@ def main():
         item = connect_get(URL_API+doi)
         item = json.loads(item)
         if item.get('message') and item['message'].get('type') \
-                               and item['message']['type'] == 'journal-article':
+           and item['message']['type'] == 'journal-article':
             print(json.dumps(item, ensure_ascii=False))
 
 if __name__ == '__main__':
