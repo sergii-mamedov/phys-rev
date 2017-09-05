@@ -1,5 +1,5 @@
-# v. 1.0
-# 03.09.2017
+# v. 1.1
+# 04.09.2017
 # Sergii Mamedov
 
 """
@@ -25,6 +25,9 @@ OUTPUT_LOCK = gevent.lock.Semaphore()
 FORMAT = '%(asctime)s   %(levelname)s   %(message)s'
 logging.basicConfig(format=FORMAT, level=logging.INFO)
 
+URL_API = 'http://api.crossref.org/works/'
+URL_JOURNAL = 'http://data.crossref.org/depositorreport?pubid=J5202'
+
 
 def connect_get(url, timeout=30, headers={}, cookies={}):
     """
@@ -41,7 +44,7 @@ def connect_get(url, timeout=30, headers={}, cookies={}):
             conn.raise_for_status()
             break
         except requests.exceptions.RequestException as err:
-            logging.info('RequestException, HTTP Code\t{}'.format(conn.status_code))
+            logging.info('RequestException\t{}'.format(err))
 
         time.sleep(MAX_RETRIES)
 
@@ -57,30 +60,46 @@ def get_dois_list(url):
     return [item.split(' ')[0] for item in raw.split('\r\n')[2:] if item.strip()]
 
 
-def get_info(url):
+def change_dois_list(sequence):
     """
-    return metadata of article
     """
 
-    item = connect_get(url)
-    item = json.loads(item)
-    if item.get('message') and item['message'].get('type') \
-       and item['message']['type'] == 'journal-article':
-        with OUTPUT_LOCK:
-            print(json.dumps(item, ensure_ascii=False))
+    data = {}
+    for item in sequence:
+        key = item.split('.')
+        key = '{}.{}'.format('.'.join(key[:2]), key[2].zfill(2))
+        data[key] = data.get(key, []) + [item]
+
+    return data
+
+
+def get_info(name, dois):
+    """
+    write metadata of article in file
+    """
+
+    name = name.split('/')[1].split('.')
+    name = '{}.{}.txt'.format(name[0], name[1])
+    with open(name, encoding='utf-8', mode='w') as f:
+        for doi in dois:
+            item = connect_get(URL_API+doi)
+            item = json.loads(item)
+            if item.get('message') and item['message'].get('type') \
+               and item['message']['type'] == 'journal-article':
+                f.write(json.dumps(item, ensure_ascii=False) + '\n')
 
 
 def main():
 
-    URL_API = 'http://api.crossref.org/works/'
-    URL_JOURNAL = 'http://data.crossref.org/depositorreport?pubid=J140965'
-
+    logging.info('Start')
     dois = get_dois_list(URL_JOURNAL)
+    dois = change_dois_list(dois)
+    logging.info('Get DOIs list')
 
     pool = gevent.pool.Pool(10)
-    for doi in tqdm(dois):
+    for name, dois_sublist in tqdm(sorted(dois.items(), key=lambda x: x)):
         pool.wait_available()
-        pool.apply_async(get_info, args=[URL_API+doi])
+        pool.apply_async(get_info, args=[name, dois_sublist])
     pool.join()
 
 if __name__ == '__main__':

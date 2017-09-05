@@ -101,3 +101,4 @@ ENV/
 .mypy_cache/
 phys-rev.sublime-project
 phys-rev.sublime-workspace
+data
